@@ -471,4 +471,55 @@ addEventListener('resize',queueScroll);
 addEventListener('pageshow',queueScroll);
 document.fonts?.ready.then(queueScroll);
 updateScroll();
+</script><script>
+/* borrowed-tomorrow | iframe scroll bridge for fullbleed v17 */
+(() => {
+  if (window.parent === window) return;
+  const channel = 'borrowed-tomorrow';
+  let parentOrigin = null;
+  let lastHeight = 0;
+  let heightQueued = false;
+  const reportHeight = () => {
+    heightQueued = false;
+    const height = Math.ceil(Math.max(
+      document.documentElement.scrollHeight,
+      document.body.scrollHeight
+    ));
+    if (height === lastHeight || !parentOrigin) return;
+    lastHeight = height;
+    window.parent.postMessage({type: channel + '-height', height}, parentOrigin);
+  };
+  const queueHeight = () => {
+    if (heightQueued) return;
+    heightQueued = true;
+    requestAnimationFrame(reportHeight);
+  };
+  window.addEventListener('message', event => {
+    if (event.source !== window.parent) return;
+    const data = event.data || {};
+    if (data.type === channel + '-request-height') {
+      parentOrigin = event.origin;
+      lastHeight = 0;
+      queueHeight();
+    } else if (data.type === channel + '-set-scroll') {
+      parentOrigin = event.origin;
+      const y = Number(data.y);
+      if (Number.isFinite(y)) {
+        window.scrollTo({top: Math.max(0, y), behavior: 'instant'});
+      }
+    }
+  });
+  // The iframe covers the screen; route wheel input to the article page.
+  window.addEventListener('wheel', event => {
+    if (!parentOrigin || !event.cancelable) return;
+    event.preventDefault();
+    const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1;
+    window.parent.postMessage({type: channel + '-wheel', deltaY: event.deltaY * unit}, parentOrigin);
+  }, {passive:false});
+  document.documentElement.style.scrollBehavior = 'auto';
+  if ('ResizeObserver' in window) new ResizeObserver(queueHeight).observe(document.body);
+  window.addEventListener('load', queueHeight);
+  window.addEventListener('resize', queueHeight);
+  document.fonts?.ready.then(queueHeight);
+})();
 </script></body></html>
